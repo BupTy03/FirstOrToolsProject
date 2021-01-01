@@ -173,7 +173,7 @@ void PrintSchedule(const Schedule& schedule,
         std::cout << std::string(94, '-') << '\n';
         std::cout << '|' << std::string(31, ' ') << align(days.at(d)) << std::string(31, ' ') << "|\n";
         std::cout << std::string(94, '-') << '\n';
-        for (std::size_t s = 0; s < subjects.size() - 1; ++s)
+        for (std::size_t s = 0; s < schedule.at(0).at(0).size(); ++s)
         {
             std::cout << '|' << std::string(30, ' ') << '|';
             for (std::size_t g = 0; g < groups.size(); ++g)
@@ -183,6 +183,20 @@ void PrintSchedule(const Schedule& schedule,
             std::cout << '\n';
         }
     }
+}
+
+Schedule OptimizeWindows(Schedule schedule)
+{
+    for(auto&& group : schedule)
+    {
+        for(auto&& day : group)
+        {
+            std::partition(day.begin(), day.end(), [](int s){ return s > 0; });
+            day.erase(day.begin() + 2, day.end());
+        }
+    }
+
+    return schedule;
 }
 
 int main(int argc, char* argv[])
@@ -197,10 +211,10 @@ int main(int argc, char* argv[])
                                                "Accounting",
                                                "Management"};
 
-    const auto schedule = MakeLessonsSchedule(12, groups.size(), 6, 2, {
+    const auto schedule = OptimizeWindows(MakeLessonsSchedule(12, groups.size(), 6, 2, {
             std::vector<int>({10, 4, 2, 2, 2, 2}),
             std::vector<int>({7, 4, 2, 2, 2, 2})
-    });
+    }));
 
     PrintSchedule(schedule, groups, subjects);
     return 0;
