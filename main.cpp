@@ -185,14 +185,14 @@ void PrintSchedule(const Schedule& schedule,
     }
 }
 
-Schedule OptimizeWindows(Schedule schedule)
+Schedule OptimizeWindows(Schedule schedule, std::size_t max_lessons_per_day)
 {
     for(auto&& group : schedule)
     {
         for(auto&& day : group)
         {
             std::partition(day.begin(), day.end(), [](int s){ return s > 0; });
-            day.erase(day.begin() + 2, day.end());
+            day.erase(day.begin() + max_lessons_per_day, day.end());
         }
     }
 
@@ -211,10 +211,12 @@ int main(int argc, char* argv[])
                                                "Accounting",
                                                "Management"};
 
-    const auto schedule = OptimizeWindows(MakeLessonsSchedule(12, groups.size(), 6, 2, {
+    const auto max_lessons_per_day = 2;
+
+    const auto schedule = OptimizeWindows(MakeLessonsSchedule(12, groups.size(), 6, max_lessons_per_day, {
             std::vector<int>({10, 4, 2, 2, 2, 2}),
             std::vector<int>({7, 4, 2, 2, 2, 2})
-    }));
+    }), max_lessons_per_day);
 
     PrintSchedule(schedule, groups, subjects);
     return 0;
