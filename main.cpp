@@ -124,166 +124,82 @@ Schedule MakeLessonsSchedule(int num_days,
     return schedule;
 }
 
-void NurseSchedulingProblem()
+std::string AlignCenter(std::string str, std::size_t n)
 {
-    using operations_research::sat::BoolVar;
-    using operations_research::sat::CpModelBuilder;
-    using operations_research::sat::LinearExpr;
-    using operations_research::sat::Model;
-    using operations_research::sat::CpSolverResponse;
+    const auto sz = std::size(str);
+    if(sz >= n)
+        return str;
 
-    using operations_research::sat::SolutionBooleanValue;
-    using operations_research::sat::NewSatParameters;
-    using operations_research::sat::NewFeasibleSolutionObserver;
-    using operations_research::sat::Solve;
+    const auto fields = (n - sz);
+    const auto marginLeft = fields / 2;
+    const auto marginRight = fields - marginLeft;
 
-    constexpr int num_nurses = 4;
-    constexpr int num_shifts = 3;
-    constexpr int num_days = 3;
-
-    const auto all_nurses = range(num_nurses);
-    const auto all_shifts = range(num_shifts);
-    const auto all_days = range(num_days);
-
-    CpModelBuilder cp_model;
-
-    std::map<std::tuple<int, int, int>, BoolVar> shifts;
-    for (auto n : all_nurses) {
-        for (auto d : all_days) {
-            for (auto s : all_shifts) {
-                shifts[{n, d, s}] = cp_model.NewBoolVar().WithName(
-                        "shift_n" + std::to_string(n) + 'd' + std::to_string(d) + 's' + std::to_string(s));
-            }
-        }
-    }
-
-    for (auto d : all_days) {
-        for (auto s : all_shifts) {
-            std::vector<BoolVar> v;
-            for (auto n : all_nurses)
-                v.emplace_back(shifts[{n, d, s}]);
-
-            cp_model.AddEquality(LinearExpr::BooleanSum(v), 1);
-        }
-    }
-
-    for (auto n : all_nurses) {
-        for (auto d : all_days) {
-            std::vector<BoolVar> v;
-            for (auto s : all_shifts)
-                v.emplace_back(shifts[{n, d, s}]);
-
-            cp_model.AddLessOrEqual(LinearExpr::BooleanSum(v), 1);
-        }
-    }
-
-    int min_shifts_per_nurse = (num_shifts * num_days) / num_nurses;
-    int max_shifts_per_nurse = min_shifts_per_nurse;
-    if ((num_shifts * num_days) % num_nurses == 0)
-        max_shifts_per_nurse = min_shifts_per_nurse;
-    else
-        max_shifts_per_nurse = min_shifts_per_nurse + 1;
-
-    for (auto n : all_nurses) {
-        std::vector<BoolVar> v;
-        for (auto d : all_days) {
-            for (auto s : all_shifts) {
-                v.emplace_back(shifts[{n, d, s}]);
-            }
-        }
-
-        auto num_shifts_worked = LinearExpr::BooleanSum(v);
-        cp_model.AddLessOrEqual(min_shifts_per_nurse, num_shifts_worked);
-        cp_model.AddLessOrEqual(num_shifts_worked, max_shifts_per_nurse);
-    }
-
-    const CpSolverResponse response = Solve(cp_model.Build());
-    LOG(INFO) << CpSolverResponseStats(response);
-
-    for (auto d : all_days) {
-        LOG(INFO) << "Day " << d;
-        for (auto n : all_nurses) {
-            bool is_working = false;
-            for (auto s : all_shifts) {
-                if (SolutionBooleanValue(response, shifts[{n, d, s}])) {
-                    is_working = true;
-                    LOG(INFO) << "\tNurse " << n << " works shift " << s;
-                }
-            }
-
-            if (!is_working) {
-                LOG(INFO) << "\tNurse " << n << " does not work";
-            }
-        }
-    }
+    str.insert(std::begin(str), marginLeft, ' ');
+    str.insert(std::end(str), marginRight, ' ');
+    return str;
 }
-
-struct FileCloser {
-    void operator()(FILE* f) const {
-        fclose(f);
-    }
-};
-
-using FilePtr = std::unique_ptr<FILE, FileCloser>;
 
 void PrintSchedule(const Schedule& schedule,
                    const std::vector<std::string>& groups,
                    const std::vector<std::string>& subjects)
 {
-    FilePtr file(fopen("out.csv", "w"));
-
     const std::vector<std::string> days = {
-            "Понедельник, числитель",
-            "Вторник, числитель",
-            "Среда, числитель",
-            "Четверг, числитель",
-            "Пятница, числитель",
-            "Суббота, числитель",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
 
-            "Понедельник, знаменатель",
-            "Вторник, знаменатель",
-            "Среда, знаменатель",
-            "Четверг, знаменатель",
-            "Пятница, знаменатель",
-            "Суббота, знаменатель",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
     };
 
-    fmt::print(file.get(), ";");
+    auto align = [] (std::string s) { return AlignCenter(std::move(s), 30); };
+
+    std::cout << align(" ") << " |";
     for (std::size_t g = 0; g < groups.size(); ++g)
     {
-        fmt::print(file.get(), "{};", groups.at(g));
+        std::cout << align(groups.at(g)) << '|';
     }
-    fmt::print(file.get(), "\n");
+    std::cout << '\n';
 
     for (std::size_t d = 0; d < days.size(); ++d)
     {
-        fmt::print(file.get(), "{}\n", days.at(d));
+        std::cout << std::string(94, '-') << '\n';
+        std::cout << '|' << std::string(31, ' ') << align(days.at(d)) << std::string(31, ' ') << "|\n";
+        std::cout << std::string(94, '-') << '\n';
         for (std::size_t s = 0; s < subjects.size() - 1; ++s)
         {
-            fmt::print(file.get(), ";");
+            std::cout << '|' << std::string(30, ' ') << '|';
             for (std::size_t g = 0; g < groups.size(); ++g)
             {
-                fmt::print(file.get(), "{};", subjects.at(schedule.at(g).at(d).at(s)));
+                std::cout << align(subjects.at(schedule.at(g).at(d).at(s))) << '|';
             }
-            fmt::print(file.get(), "\n");
+            std::cout << '\n';
         }
     }
 }
 
 int main(int argc, char* argv[])
 {
-    const std::vector<std::string> groups = {"ИСТ", "ПИ"};
-    const std::vector<std::string> subjects = {"Окно",
-                                               "Математика",
-                                               "Информатика",
-                                               "Экономика",
-                                               "Английский язык",
-                                               "Бухгалтерия",
-                                               "Делопроизводство"};
+    std::locale::global(std::locale("ru_Ru.UTF-8"));
+    const std::vector<std::string> groups = {"IST", "PI"};
+    const std::vector<std::string> subjects = {"#",
+                                               "Mathematics",
+                                               "Informatics",
+                                               "Economics",
+                                               "English",
+                                               "Accounting",
+                                               "Management"};
 
-    const auto schedule = MakeLessonsSchedule(12, groups.size(), 6, 5, {
+    const auto schedule = MakeLessonsSchedule(12, groups.size(), 6, 2, {
             std::vector<int>({10, 4, 2, 2, 2, 2}),
-            std::vector<int>({10, 4, 2, 2, 2, 2})
+            std::vector<int>({7, 4, 2, 2, 2, 2})
     });
 
     PrintSchedule(schedule, groups, subjects);
