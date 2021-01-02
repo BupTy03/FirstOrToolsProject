@@ -1,3 +1,8 @@
+#include "ScheduleCommon.h"
+#include "ScheduleTask.h"
+#include "ScheduleData.h"
+#include "ScheduleView.h"
+
 #include <iostream>
 #include <vector>
 #include <numeric>
@@ -20,24 +25,12 @@
 #include <fmt/core.h>
 
 
-using Day = std::vector<int>;
+using Day = std::vector<std::size_t>;
 using Group = std::vector<Day>;
 using Schedule = std::vector<Group>;
 
 
-auto range(int n)
-{
-    std::vector<int> result(n);
-    std::iota(result.begin(), result.end(), 0);
-    return result;
-}
-
-
-Schedule MakeLessonsSchedule(int num_days,
-                         int num_groups,
-                         int num_subjects,
-                         int max_lessons_per_day,
-                         const std::vector<std::vector<int>>& count_lessons_for_subject_for_group)
+Schedule MakeLessonsSchedule(const ScheduleTask& task)
 {
     using operations_research::sat::BoolVar;
     using operations_research::sat::CpModelBuilder;
@@ -54,40 +47,40 @@ Schedule MakeLessonsSchedule(int num_days,
     std::map<std::tuple<std::size_t, std::size_t, std::size_t>, BoolVar> lessons;
 
     // создание переменных
-    for(std::size_t d = 0; d < num_days; ++d)
+    for(std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
     {
-        for(std::size_t g = 0; g < num_groups; ++g)
+        for(std::size_t g = 0; g < task.CountGroups(); ++g)
         {
-            for(std::size_t s = 0; s < num_subjects; ++s)
+            for(std::size_t s = 0; s < task.CountSubjects(); ++s)
                 lessons[{d, g, s}] = cp_model.NewBoolVar();
         }
     }
 
     // для каждой группы в день не может быть более 5 пар
-    for(std::size_t d = 0; d < num_days; ++d)
+    for(std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
     {
-        for(std::size_t g = 0; g < num_groups; ++g)
+        for(std::size_t g = 0; g < task.CountGroups(); ++g)
         {
             std::vector<BoolVar> sum_subjects;
-            sum_subjects.reserve(num_subjects);
-            for(std::size_t s = 0; s < num_subjects; ++s)
+            sum_subjects.reserve(task.CountSubjects());
+            for(std::size_t s = 0; s < task.CountSubjects(); ++s)
                 sum_subjects.emplace_back(lessons[{d, g, s}]);
 
-            cp_model.AddLessOrEqual(LinearExpr::BooleanSum(sum_subjects), max_lessons_per_day);
+            cp_model.AddLessOrEqual(LinearExpr::BooleanSum(sum_subjects), task.LessonsPerDay());
         }
     }
 
     // в сумме для одной группы за весь период должно быть ровно стролько пар, сколько выделено на каждый предмет
-    for (std::size_t g = 0; g < num_groups; ++g)
+    for (std::size_t g = 0; g < task.CountGroups(); ++g)
     {
-        for(std::size_t s = 0; s < num_subjects; ++s)
+        for(std::size_t s = 0; s < task.CountSubjects(); ++s)
         {
             std::vector<BoolVar> sum_days;
-            sum_days.reserve(num_days);
-            for (std::size_t d = 0; d < num_days; ++d)
+            sum_days.reserve(DAYS_IN_SCHEDULE);
+            for (std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
                 sum_days.emplace_back(lessons[{d, g, s}]);
 
-            cp_model.AddEquality(LinearExpr::BooleanSum(sum_days), count_lessons_for_subject_for_group.at(g).at(s));
+            cp_model.AddEquality(LinearExpr::BooleanSum(sum_days), task.CountLessonsForGroup(g, s));
         }
     }
 
@@ -95,25 +88,21 @@ Schedule MakeLessonsSchedule(int num_days,
     //LOG(INFO) << CpSolverResponseStats(response);
 
     Schedule schedule;
-    schedule.reserve(num_groups);
-    for (std::size_t g = 0; g < num_groups; ++g)
+    schedule.reserve(task.CountGroups());
+    for (std::size_t g = 0; g < task.CountGroups(); ++g)
     {
         Group group;
-        group.reserve(num_days);
-        for (std::size_t d = 0; d < num_days; ++d)
+        group.reserve(DAYS_IN_SCHEDULE);
+        for (std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
         {
             Day day;
-            day.reserve(num_subjects);
-            for (std::size_t s = 0; s < num_subjects; ++s)
+            day.reserve(task.CountSubjects());
+            for (std::size_t s = 0; s < task.CountSubjects(); ++s)
             {
                 if (SolutionBooleanValue(response, lessons[{d, g, s}]))
-                {
                     day.emplace_back(s + 1);
-                }
                 else
-                {
                     day.emplace_back(0);
-                }
             }
             group.emplace_back(std::move(day));
         }
@@ -124,100 +113,73 @@ Schedule MakeLessonsSchedule(int num_days,
     return schedule;
 }
 
-std::string AlignCenter(std::string str, std::size_t n)
-{
-    const auto sz = std::size(str);
-    if(sz >= n)
-        return str;
-
-    const auto fields = (n - sz);
-    const auto marginLeft = fields / 2;
-    const auto marginRight = fields - marginLeft;
-
-    str.insert(std::begin(str), marginLeft, ' ');
-    str.insert(std::end(str), marginRight, ' ');
-    return str;
-}
-
-void PrintSchedule(const Schedule& schedule,
-                   const std::vector<std::string>& groups,
-                   const std::vector<std::string>& subjects)
-{
-    const std::vector<std::string> days = {
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-
-            "Monday",
-            "Tuesday",
-            "Wednesday",
-            "Thursday",
-            "Friday",
-            "Saturday",
-    };
-
-    auto align = [] (std::string s) { return AlignCenter(std::move(s), 30); };
-
-    std::cout << align(" ") << " |";
-    for (std::size_t g = 0; g < groups.size(); ++g)
-    {
-        std::cout << align(groups.at(g)) << '|';
-    }
-    std::cout << '\n';
-
-    for (std::size_t d = 0; d < days.size(); ++d)
-    {
-        std::cout << std::string(94, '-') << '\n';
-        std::cout << '|' << std::string(31, ' ') << align(days.at(d)) << std::string(31, ' ') << "|\n";
-        std::cout << std::string(94, '-') << '\n';
-        for (std::size_t s = 0; s < schedule.at(0).at(0).size(); ++s)
-        {
-            std::cout << '|' << std::string(30, ' ') << '|';
-            for (std::size_t g = 0; g < groups.size(); ++g)
-            {
-                std::cout << align(subjects.at(schedule.at(g).at(d).at(s))) << '|';
-            }
-            std::cout << '\n';
-        }
-    }
-}
-
-Schedule OptimizeWindows(Schedule schedule, std::size_t max_lessons_per_day)
+Schedule OptimizeWindows(Schedule schedule)
 {
     for(auto&& group : schedule)
     {
         for(auto&& day : group)
         {
             std::partition(day.begin(), day.end(), [](int s){ return s > 0; });
-            day.erase(day.begin() + max_lessons_per_day, day.end());
+            day.erase(day.begin() + MAX_LESSONS_PER_DAY, day.end());
         }
     }
 
     return schedule;
 }
 
+ScheduleData MakeScheduleData(const Schedule& schedule,
+                              const std::vector<std::string>& groups,
+                              const std::vector<std::string>& subjects)
+{
+    std::vector<GroupSchedule> groupsSchedules;
+    groupsSchedules.reserve(std::size(groups));
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        std::vector<DaySchedule> daySchedules;
+        for (std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
+        {
+            std::vector<std::string> lessons;
+            lessons.reserve(MAX_LESSONS_PER_DAY);
+            for (auto&& lesson : schedule.at(g).at(d))
+                lessons.emplace_back(subjects.at(lesson));
+
+            daySchedules.emplace_back(std::move(lessons));
+        }
+
+        groupsSchedules.emplace_back(groups.at(g), std::move(daySchedules));
+    }
+
+    return ScheduleData(std::move(groupsSchedules));
+}
+
 int main(int argc, char* argv[])
 {
-    std::locale::global(std::locale("ru_Ru.UTF-8"));
-    const std::vector<std::string> groups = {"IST", "PI"};
-    const std::vector<std::string> subjects = {"#",
-                                               "Mathematics",
-                                               "Informatics",
-                                               "Economics",
-                                               "English",
-                                               "Accounting",
-                                               "Management"};
+    try {
+        std::locale::global(std::locale("ru_Ru.UTF-8"));
 
-    const auto max_lessons_per_day = 2;
+        const std::vector<std::string> groups = {"IST", "PI"};
+        const std::vector<std::string> subjects = {"#",
+                                                   "Mathematics",
+                                                   "Informatics",
+                                                   "Economics",
+                                                   "English",
+                                                   "Accounting",
+                                                   "Management"};
 
-    const auto schedule = OptimizeWindows(MakeLessonsSchedule(12, groups.size(), 6, max_lessons_per_day, {
-            std::vector<int>({10, 4, 2, 2, 2, 2}),
-            std::vector<int>({7, 4, 2, 2, 2, 2})
-    }), max_lessons_per_day);
+        const ScheduleTask task(2, {
+                std::vector<std::size_t>({10, 4, 2, 2, 2, 2}),
+                std::vector<std::size_t>({7, 4, 2, 2, 2, 2})
+        });
 
-    PrintSchedule(schedule, groups, subjects);
+
+        const auto schedule = OptimizeWindows(MakeLessonsSchedule(task));
+        const auto data = MakeScheduleData(schedule, groups, subjects);
+        ConsoleScheduleView().Show(data);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Exception: " << e.what() << std::endl;
+    }
+
     return 0;
 }

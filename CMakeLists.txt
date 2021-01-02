@@ -18,7 +18,11 @@ conan_define_targets()
 
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 
-add_executable(FirstOrToolsProject main.cpp)
+add_executable(FirstOrToolsProject
+        main.cpp ScheduleData.h
+        ScheduleView.h ScheduleView.cpp
+        ScheduleTask.h
+        ScheduleCommon.h)
 
 set(OR_TOOLS_ROOT D:/Libs/or-tools_VisualStudio2019-64bit_v8.1.8487)
 target_include_directories(FirstOrToolsProject PRIVATE ${OR_TOOLS_ROOT}/include)
