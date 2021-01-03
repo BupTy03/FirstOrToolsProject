@@ -7,22 +7,6 @@
 #include <stdexcept>
 
 
-enum class ScheduleDay {
-    MondayEven,
-    TuesdayEven,
-    WednesdayEven,
-    ThursdayEven,
-    FridayEven,
-    SaturdayEven,
-
-    MondayOdd,
-    TuesdayOdd,
-    WednesdayOdd,
-    ThursdayOdd,
-    FridayOdd,
-    SaturdayOdd
-};
-
 struct DaySchedule
 {
     explicit DaySchedule(std::vector<std::string> lessons)

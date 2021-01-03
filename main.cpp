@@ -3,6 +3,16 @@
 #include "ScheduleData.h"
 #include "ScheduleView.h"
 
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_split.h"
+#include "ortools/base/commandlineflags.h"
+#include "ortools/base/filelineiter.h"
+#include "ortools/base/logging.h"
+#include "ortools/sat/cp_model.h"
+#include "ortools/sat/model.h"
+
+#include <fmt/core.h>
+
 #include <iostream>
 #include <vector>
 #include <numeric>
@@ -13,16 +23,6 @@
 #include <memory>
 #include <cstdio>
 #include <clocale>
-
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_split.h"
-#include "ortools/base/commandlineflags.h"
-#include "ortools/base/filelineiter.h"
-#include "ortools/base/logging.h"
-#include "ortools/sat/cp_model.h"
-#include "ortools/sat/model.h"
-
-#include <fmt/core.h>
 
 
 using Day = std::vector<std::size_t>;
@@ -44,29 +44,34 @@ Schedule MakeLessonsSchedule(const ScheduleTask& task)
     using operations_research::sat::Solve;
 
     CpModelBuilder cp_model;
-    std::map<std::tuple<std::size_t, std::size_t, std::size_t>, BoolVar> lessons;
+    std::map<std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>, BoolVar> lessons;
 
     // создание переменных
     for(std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
     {
         for(std::size_t g = 0; g < task.CountGroups(); ++g)
         {
-            for(std::size_t s = 0; s < task.CountSubjects(); ++s)
-                lessons[{d, g, s}] = cp_model.NewBoolVar();
+            for(std::size_t l = 0; l < task.CountLessonsPerDay(); ++l)
+            {
+                for (std::size_t s = 0; s < task.CountSubjects(); ++s)
+                    lessons[{d, g, l, s}] = cp_model.NewBoolVar();
+            }
         }
     }
 
-    // для каждой группы в день не может быть более 5 пар
-    for(std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
+    // в одно время может быть только один предмет
+    for (std::size_t g = 0; g < task.CountGroups(); ++g)
     {
-        for(std::size_t g = 0; g < task.CountGroups(); ++g)
+        for (std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
         {
-            std::vector<BoolVar> sum_subjects;
-            sum_subjects.reserve(task.CountSubjects());
-            for(std::size_t s = 0; s < task.CountSubjects(); ++s)
-                sum_subjects.emplace_back(lessons[{d, g, s}]);
+            for(std::size_t l = 0; l < task.CountLessonsPerDay(); ++l)
+            {
+                std::vector<BoolVar> sum_subjects;
+                for(std::size_t s = 0; s < task.CountSubjects(); ++s)
+                    sum_subjects.emplace_back(lessons[{d, g, l, s}]);
 
-            cp_model.AddLessOrEqual(LinearExpr::BooleanSum(sum_subjects), task.LessonsPerDay());
+                cp_model.AddLessOrEqual(LinearExpr::BooleanSum(sum_subjects), 1);
+            }
         }
     }
 
@@ -76,15 +81,41 @@ Schedule MakeLessonsSchedule(const ScheduleTask& task)
         for(std::size_t s = 0; s < task.CountSubjects(); ++s)
         {
             std::vector<BoolVar> sum_days;
-            sum_days.reserve(DAYS_IN_SCHEDULE);
+            sum_days.reserve(DAYS_IN_SCHEDULE * task.CountLessonsPerDay());
             for (std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
-                sum_days.emplace_back(lessons[{d, g, s}]);
+            {
+                for(std::size_t l = 0; l < task.CountLessonsPerDay(); ++l)
+                    sum_days.emplace_back(lessons[{d, g, l, s}]);
+            }
 
             cp_model.AddEquality(LinearExpr::BooleanSum(sum_days), task.CountLessonsForGroup(g, s));
         }
     }
 
+    // учитываем пожелания
+    const auto requests = task.Requests();
+    std::vector<BoolVar> sum;
+    sum.reserve(DAYS_IN_SCHEDULE * task.CountGroups() * task.CountLessonsPerDay() * task.CountSubjects());
+    for(std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
+    {
+        for(std::size_t g = 0; g < task.CountGroups(); ++g)
+        {
+            for(std::size_t l = 0; l < task.CountLessonsPerDay(); ++l)
+            {
+                for (std::size_t s = 0; s < task.CountSubjects(); ++s)
+                {
+                    if(requests.at({d, g, l, s}))
+                        sum.emplace_back(lessons[{d, g, l, s}]);
+                }
+            }
+        }
+    }
+    cp_model.Maximize(LinearExpr::BooleanSum(sum));
+
+
+    std::cout << "Start solving..." << std::endl;
     const CpSolverResponse response = Solve(cp_model.Build());
+    std::cout << "End solving..." << std::endl;
     //LOG(INFO) << CpSolverResponseStats(response);
 
     Schedule schedule;
@@ -95,15 +126,19 @@ Schedule MakeLessonsSchedule(const ScheduleTask& task)
         group.reserve(DAYS_IN_SCHEDULE);
         for (std::size_t d = 0; d < DAYS_IN_SCHEDULE; ++d)
         {
-            Day day;
-            day.reserve(task.CountSubjects());
-            for (std::size_t s = 0; s < task.CountSubjects(); ++s)
+            Day day(MAX_LESSONS_PER_DAY, 0);
+            for(std::size_t l = 0; l < task.CountLessonsPerDay(); ++l)
             {
-                if (SolutionBooleanValue(response, lessons[{d, g, s}]))
-                    day.emplace_back(s + 1);
-                else
-                    day.emplace_back(0);
+                for(std::size_t s = 0; s < task.CountSubjects(); ++s)
+                {
+                    if (SolutionBooleanValue(response, lessons[{d, g, l, s}]))
+                    {
+                        day.at(l) = s + 1;
+                        break;
+                    }
+                }
             }
+
             group.emplace_back(std::move(day));
         }
 
@@ -166,10 +201,14 @@ int main(int argc, char* argv[])
                                                    "Accounting",
                                                    "Management"};
 
-        const ScheduleTask task(2, {
+        const ScheduleTask task(5, {
                 std::vector<std::size_t>({10, 4, 2, 2, 2, 2}),
                 std::vector<std::size_t>({7, 4, 2, 2, 2, 2})
-        });
+        },
+        {{3,{
+            {0, {{ScheduleDay::MondayEven, LessonWishes({0})}}},
+            {1, {{ScheduleDay::TuesdayEven, LessonWishes({0, 1})}}}
+        }}});
 
 
         const auto schedule = OptimizeWindows(MakeLessonsSchedule(task));
