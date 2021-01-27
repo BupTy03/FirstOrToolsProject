@@ -30,6 +30,49 @@ using Group = std::vector<Day>;
 using Schedule = std::vector<Group>;
 
 
+class MultyMatrix
+{
+public:
+    using value_type = std::string; //operations_research::sat::BoolVar;
+    using size_type = std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>;
+
+    explicit MultyMatrix(size_type sz)
+        : size_(sz)
+        , elems_(std::get<0>(sz) * std::get<1>(sz) * std::get<2>(sz) * std::get<3>(sz))
+    {}
+
+    const value_type& at(const size_type& index) const
+    {
+        check_index<0>(index, size_);
+        check_index<1>(index, size_);
+        check_index<2>(index, size_);
+        check_index<3>(index, size_);
+
+        return elems_.at(std::get<0>(index) * std::get<1>(size_) * std::get<2>(size_) * std::get<3>(size_) +
+                              std::get<1>(index) * std::get<2>(size_) * std::get<3>(size_) +
+                              std::get<2>(index) * std::get<3>(size_) +
+                              std::get<3>(index));
+    }
+
+    value_type& at(const size_type& index)
+    {
+        return const_cast<value_type&>(const_cast<const MultyMatrix*>(this)->at(index));
+    }
+
+private:
+    template<std::size_t N>
+    void check_index(const size_type& index, const size_type& sz) const
+    {
+        if(std::get<N>(index) >= std::get<N>(sz))
+            throw std::out_of_range(std::to_string(N) + " index is out of range!");
+    }
+
+private:
+    size_type size_;
+    std::vector<value_type> elems_;
+};
+
+
 Schedule MakeLessonsSchedule(const ScheduleTask& task)
 {
     using operations_research::sat::BoolVar;
@@ -190,30 +233,60 @@ ScheduleData MakeScheduleData(const Schedule& schedule,
 int main(int argc, char* argv[])
 {
     try {
-        std::locale::global(std::locale("ru_Ru.UTF-8"));
+//        const std::vector<std::string> groups = {"IST", "PI"};
+//        const std::vector<std::string> subjects = {"#",
+//                                                   "Mathematics",
+//                                                   "Informatics",
+//                                                   "Economics",
+//                                                   "English",
+//                                                   "Accounting",
+//                                                   "Management"};
+//
+//        const ScheduleTask task(5, {
+//                std::vector<std::size_t>({10, 4, 2, 2, 2, 2}),
+//                std::vector<std::size_t>({7, 4, 2, 2, 2, 2})
+//        },
+//        {{3,{
+//            {0, {{ScheduleDay::MondayEven, LessonWishes({0})}}},
+//            {1, {{ScheduleDay::TuesdayEven, LessonWishes({0, 1})}}}
+//        }}});
+//
+//
+//        const auto schedule = OptimizeWindows(MakeLessonsSchedule(task));
+//        const auto data = MakeScheduleData(schedule, groups, subjects);
+//        ConsoleScheduleView().Show(data);
 
-        const std::vector<std::string> groups = {"IST", "PI"};
-        const std::vector<std::string> subjects = {"#",
-                                                   "Mathematics",
-                                                   "Informatics",
-                                                   "Economics",
-                                                   "English",
-                                                   "Accounting",
-                                                   "Management"};
+        MultyMatrix mtx(std::make_tuple(3, 2, 3, 5));
+        for(std::size_t i = 0; i < 3; ++i)
+        {
+            for(std::size_t j = 0; j < 2; ++j)
+            {
+                for(std::size_t k = 0; k < 3; ++k)
+                {
+                    for(std::size_t m = 0; m < 5; ++m)
+                    {
+                        mtx.at({i, j, k, m}) = std::to_string(i) + std::to_string(j) + std::to_string(k) + std::to_string(m);
+                    }
+                }
+            }
+        }
 
-        const ScheduleTask task(5, {
-                std::vector<std::size_t>({10, 4, 2, 2, 2, 2}),
-                std::vector<std::size_t>({7, 4, 2, 2, 2, 2})
-        },
-        {{3,{
-            {0, {{ScheduleDay::MondayEven, LessonWishes({0})}}},
-            {1, {{ScheduleDay::TuesdayEven, LessonWishes({0, 1})}}}
-        }}});
+        for(std::size_t i = 0; i < 3; ++i)
+        {
+            for(std::size_t j = 0; j < 2; ++j)
+            {
+                for(std::size_t k = 0; k < 3; ++k)
+                {
+                    for(std::size_t m = 0; m < 5; ++m)
+                    {
+                        std::string curr = std::to_string(i) + std::to_string(j) + std::to_string(k) + std::to_string(m);
+                        std::cout << curr << " = " << mtx.at({i, j, k, m}) << " (" << std::boolalpha << (curr == mtx.at({i, j, k, m})) << ")\n";
+                    }
+                }
+            }
+        }
 
-
-        const auto schedule = OptimizeWindows(MakeLessonsSchedule(task));
-        const auto data = MakeScheduleData(schedule, groups, subjects);
-        ConsoleScheduleView().Show(data);
+        std::cout << std::endl;
     }
     catch (const std::exception& e)
     {
