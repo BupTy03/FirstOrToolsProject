@@ -11,8 +11,6 @@
 #include "ortools/sat/cp_model.h"
 #include "ortools/sat/model.h"
 
-#include <fmt/core.h>
-
 #include <iostream>
 #include <vector>
 #include <numeric>
@@ -233,60 +231,28 @@ ScheduleData MakeScheduleData(const Schedule& schedule,
 int main(int argc, char* argv[])
 {
     try {
-//        const std::vector<std::string> groups = {"IST", "PI"};
-//        const std::vector<std::string> subjects = {"#",
-//                                                   "Mathematics",
-//                                                   "Informatics",
-//                                                   "Economics",
-//                                                   "English",
-//                                                   "Accounting",
-//                                                   "Management"};
-//
-//        const ScheduleTask task(5, {
-//                std::vector<std::size_t>({10, 4, 2, 2, 2, 2}),
-//                std::vector<std::size_t>({7, 4, 2, 2, 2, 2})
-//        },
-//        {{3,{
-//            {0, {{ScheduleDay::MondayEven, LessonWishes({0})}}},
-//            {1, {{ScheduleDay::TuesdayEven, LessonWishes({0, 1})}}}
-//        }}});
-//
-//
-//        const auto schedule = OptimizeWindows(MakeLessonsSchedule(task));
-//        const auto data = MakeScheduleData(schedule, groups, subjects);
-//        ConsoleScheduleView().Show(data);
+        const std::vector<std::string> groups = {"IST", "PI"};
+        const std::vector<std::string> subjects = {"#",
+                                                   "Mathematics",
+                                                   "Informatics",
+                                                   "Economics",
+                                                   "English",
+                                                   "Accounting",
+                                                   "Management"};
 
-        MultyMatrix mtx(std::make_tuple(3, 2, 3, 5));
-        for(std::size_t i = 0; i < 3; ++i)
-        {
-            for(std::size_t j = 0; j < 2; ++j)
-            {
-                for(std::size_t k = 0; k < 3; ++k)
-                {
-                    for(std::size_t m = 0; m < 5; ++m)
-                    {
-                        mtx.at({i, j, k, m}) = std::to_string(i) + std::to_string(j) + std::to_string(k) + std::to_string(m);
-                    }
-                }
-            }
-        }
+        const ScheduleTask task(5, {
+                std::vector<std::size_t>({10, 4, 2, 2, 2, 2}),
+                std::vector<std::size_t>({7, 4, 2, 2, 2, 2})
+        },
+        {{3,{
+            {0, {{ScheduleDay::MondayEven, LessonWishes({0})}}},
+            {1, {{ScheduleDay::TuesdayEven, LessonWishes({0, 1})}}}
+        }}});
 
-        for(std::size_t i = 0; i < 3; ++i)
-        {
-            for(std::size_t j = 0; j < 2; ++j)
-            {
-                for(std::size_t k = 0; k < 3; ++k)
-                {
-                    for(std::size_t m = 0; m < 5; ++m)
-                    {
-                        std::string curr = std::to_string(i) + std::to_string(j) + std::to_string(k) + std::to_string(m);
-                        std::cout << curr << " = " << mtx.at({i, j, k, m}) << " (" << std::boolalpha << (curr == mtx.at({i, j, k, m})) << ")\n";
-                    }
-                }
-            }
-        }
 
-        std::cout << std::endl;
+        const auto schedule = OptimizeWindows(MakeLessonsSchedule(task));
+        const auto data = MakeScheduleData(schedule, groups, subjects);
+        ConsoleScheduleView().Show(data);
     }
     catch (const std::exception& e)
     {

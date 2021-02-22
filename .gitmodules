@@ -1,0 +1,3 @@
+[submodule "or-tools"]
+	path = or-tools
+	url = git@github.com:google/or-tools.git
